@@ -1,4 +1,6 @@
 import os
+import re
+import docx
 import pandas as pd
 import tkinter as tk
 from tkinter import filedialog
@@ -27,7 +29,7 @@ def read_student_info(student_info_filepath, req_cols):
         1. student_info_df - pandas.core.DataFrame - The student information as a pandas DataFrame.
     """
     # Reading the student information file:
-    student_info_df = pd.read_excel(student_info_filepath)
+    student_info_df = pd.read_excel(student_info_filepath, engine="openpyxl")
     # Standardisation of the column names:
     student_info_file_cols = [
         f.lower().strip().replace(" ", "_") for f in student_info_df.columns
@@ -55,11 +57,86 @@ def browse_output_dir():
     output_dir_var.set(directory)
 
 
+# User-defined function to replace the keywords in the docx file:
+def fill_certificate(doc_obj, replacement_keywords_dict):
+    """
+    Replaces placeholders in a Word document (.docx) with values from a provided dictionary.
+
+    This function iterates through all sections and paragraphs in the header of the document,
+    searching for text patterns specified in the `replacement_keywords_dict`. It then replaces
+    these patterns with the corresponding values from the dictionary.
+
+    Args:
+        doc_obj (docx.Document): The Word document object to be modified.
+        replacement_keywords_dict (dict): A dictionary where keys are regular expression patterns
+                                          and values are the corresponding replacement strings.
+
+    Returns:
+        docx.Document: The modified Word document object with placeholders replaced.
+    """
+    for section in doc_obj.sections:
+        header = section.header
+        for paragraph in header.paragraphs:
+            for (
+                replacement_pattern,
+                replacement_value,
+            ) in replacement_keywords_dict.items():
+                paragraph.text = re.sub(
+                    replacement_pattern,
+                    replacement_value,
+                    paragraph.text,
+                    flags=re.IGNORECASE,
+                )
+    return doc_obj
+
+
+def create_certificates(
+    certificate_template, student_info_df, replacement_keywords_dict, output_dir="./"
+):
+    student_info_lst = student_info_df.to_dict(orient="records")
+    for student_info_dict in student_info_lst:
+        working_certificate_copy = certificate_template
+        for key in replacement_keywords_dict.keys():
+            replacement_keywords_dict[key] = str(student_info_dict[key.lower()])
+        fill_certificate(
+            doc_obj=working_certificate_copy,
+            replacement_keywords_dict=replacement_keywords_dict,
+        )
+        certificate_filepath = os.path.join(
+            output_dir, f"{student_info_dict['student_name']}.docx"
+        )
+        working_certificate_copy.save(certificate_filepath)
+
+
+# User-defined function to read the certificate temple stored as a ".docx" file:
+def read_certificate_template(certificate_template_path):
+    """
+    Reads the certificate template stored as a word document ".docx" file format.
+
+    Arguments:
+    1. certificate_template_path - str - Path to the ".docx" file with the certificate
+        template.
+    """
+    # Reading the ".docx" file with the certificate template:
+    with open(certificate_template_path, "rb") as word_file:
+        certificate_template = docx.Document(word_file)
+    return certificate_template
+
+
 def start_certificate_maker():
     student_info_df = read_student_info(
-        student_info_filepath=certificate_template_filepath_var.get(), req_cols=REQ_COLS
+        student_info_filepath=student_info_filepath_var.get(), req_cols=REQ_COLS
     )
-    tk.messagebox.show("Student Info file Processing is complete. Wait for the next pop-up to appear!")
+    certificate_template = read_certificate_template(
+        certificate_template_path=certificate_template_filepath_var.get()
+    )
+    create_certificates(
+        certificate_template=certificate_template,
+        student_info_df=student_info_df,
+        replacement_keywords_dict=REPLACEMENT_KEYWORDS_DICT,
+        output_dir=output_dir_var.get()
+    )
+    tk.messagebox.showinfo("Process Notifier", "The creation of certification is complete")
 
 
 app = tk.Tk()

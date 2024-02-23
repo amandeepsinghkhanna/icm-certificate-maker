@@ -1,2 +1,4 @@
-pandas==2.1.4
-docx==1.1.0
+pandas
+python-docx
+docx
+openpyxl
